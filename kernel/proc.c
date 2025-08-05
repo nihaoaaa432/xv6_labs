@@ -288,7 +288,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
+  np->tracemask = p->tracemask; // 子进程继承父进程的追踪掩码
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -653,4 +653,15 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+int
+count_proc(void)
+{
+  struct proc *p;
+  int count = 0;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    if (p->state != UNUSED)
+      count++;
+  }
+  return count;
 }

@@ -1,0 +1,37 @@
+1. Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+RISC-V 的调用约定规定函数参数通过寄存器 a0 到 a7（即 x10 到 x17）传递。
+在 main 中的 printf("%d %d\n", f(8)+1, 13) 调用里，参数传递顺序是：a0 放第一个整数，a1 放第二个，a2 放第三个（如果有）。
+从 24: li a2,13 可以看出，立即数 13 存放在 a2 寄存器。
+
+2.Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+main 中并没有直接出现 jal f 或 jal g 这样的调用指令，这是因为两个函数的逻辑都非常简单，
+编译器在优化时选择了内联，直接把 f 和 g 的计算过程展开到调用点。所以实际执行中，f(8)+1 已在编译期被替换成 12，根本没有额外的跳转。
+
+3.At what address is the function printf located?
+以下这段代码为跳转到printf对应位置：
+34:	600080e7          	jalr	1536(ra) # 630 <printf>
+由汇编代码可知 printf 函数的地址为 ra+1536，查看上一条汇编代码
+30:	00000097          	auipc	ra,0x0
+可知此时ra 的值即为0x30，因此 printf 函数的地址为0x30+1536=0x630。
+
+4.What value is in the register ra just after the jalr to printf in main?
+jalr 会将下一条指令的地址（PC+4）写入 ra 作为返回点。由于执行跳转的指令位于 0x34，因此跳转后 ra 中保存的是 0x38。
+
+5. Run the following code.
+	unsigned int i = 0x00646c72;
+	printf("H%x Wo%s", 57616, &i);
+      
+What is the output? The output depends on that fact that the RISC-V is little-endian. 
+If the RISC-V were instead big-endian what would you set to in order to yield the same output? 
+Would you need to change to a different value?
+%x 表示以十六进制格式输出整数 57616，即输出 e110；%s 从地址 &i 开始，将连续内存解释为字符串（以 \0 结尾的字节序列）。
+i = 0x00646c72，对应16字节进制 00 64 6c 72，按小端存储顺序，其在内存中按顺序为 72 6c 64 00，分别对应'r'、'l'、'd'、\0，因此 %s 输出 "rld"。
+故最终输出为“He110 World”。
+如果是大端系统，影响 %s 的输出，第一个存储的字节为 \0 ，因此不会再输出其它字节，输出结果为“He110 Wo”。
+为了得到和小端一样的 "rld" 输出，需要让内存中按顺序存储 72 6c 64 00，即令 unsigned int i = 0x726c6400。无需修改除i外的值。
+
+6. In the following code, what is going to be printed after  'y='? (note: the answer is not a specific value.) 
+Why does this happen?
+	printf("x=%d y=%d", 3);
+printf 会根据格式字符串去读取两个整数参数，但实际只传入了一个。
+根据 RISC-V 的调用规范，第一个整数会放到 a1 中，而 a2（对应第二个 %d）没有被初始化，结果是 y 会打印出一个受栈或寄存器之前内容影响的未定义值。

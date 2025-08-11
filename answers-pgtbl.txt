@@ -1,0 +1,16 @@
+1.Which other xv6 system call(s) could be made faster using this shared page? Explain how
+除了 getpid()，还有一些系统调用也可以通过共享的只读页面来提升效率。
+这些调用都有一个特点：它们只需要从内核读取信息，不涉及写操作。
+比如 getppid() 就是一个例子，它返回的是当前进程的父进程 ID，这个值在内核中本就存在。
+我们可以把它添加到 struct usyscall 中，在进程调度或 fork 的时候更新这个字段，用户程序就可以像读取普通内存一样拿到 ppid，不再需要切换到内核态。
+同样的，uptime() 调用本质上就是读取系统时钟的 tick 值，这个值也可以在共享页中设置一个字段，由内核定期更新，这样用户态程序可以直接读出来。
+像 getuid() 这类用户身份信息查询也适合这种优化方式。通过这种机制，原本需要陷入内核的调用路径就变成了用户态内存读取，执行效率能得到显著提升。
+2.Explain the output of vmprint in terms of Fig 3-4 from the text. 
+What does page 0 contain? What is in page 2? When running in user mode, could the process read/write the memory mapped by page 1? 
+What does the third to last page contain?
+vmprint() 的输出按 RISC-V 三层页表结构展开。
+最顶层（L2）是页目录，条目指向中间层（L1），L1 条目再指向底层（L0），而 L0 条目才真正映射到物理内存页帧。
+“page 0” 表示 L2 中第 0 项有效，指向一个 L1；L1 第 0 项有效，指向 L0；L0 的第 0、1、2 项分别映射到用户空间前三个物理页帧。
+“page 2” 表示 L0 的第 2 项，即第三个虚拟页。
+“page 1” 同理是 L0 的第二项，PTE 权限位（PTE_U、PTE_R、PTE_W）决定用户态能否读写该页。
+倒数第三个有效页通常是 trampoline 或内核栈的映射，属于特殊用途，可能设置为只执行且用户态不可访问，用于用户态与内核态切换。

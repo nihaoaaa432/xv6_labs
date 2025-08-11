@@ -77,13 +77,45 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
-int
-sys_pgaccess(void)
+extern pte_t* walk(pagetable_t pagetable, uint64 va, int alloc);
+
+int sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
+  uint64 base;      // 起始虚拟地址
+  int len;          // 检查的页数
+  uint64 user_mask; // 用户空间结果存放地址
+
+  // 参数解析与校验
+  if (argaddr(0, &base) < 0 ||
+      argint(1, &len) < 0 ||
+      argaddr(2, &user_mask) < 0)
+    return -1;
+  if (len <= 0 || len > 64)
+    return -1;
+
+  struct proc *p = myproc();
+  uint64 mask = 0;
+
+  // 遍历每一页并检查访问位
+  for (int i = 0; i < len; i++) {
+    uint64 va = base + i * PGSIZE;
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte && (*pte & PTE_V)) {
+      if (*pte & PTE_A) {
+        mask |= (1UL << i);   // 记录访问过的页
+        *pte &= ~PTE_A;       // 清除访问标志
+      }
+    }
+  }
+
+  // 将结果返回到用户空间
+  if (copyout(p->pagetable, user_mask, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
   return 0;
 }
 #endif
+
 
 uint64
 sys_kill(void)

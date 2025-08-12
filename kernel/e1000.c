@@ -91,6 +91,7 @@ e1000_init(uint32 *xregs)
   regs[E1000_RADV] = 0; // interrupt after every packet (no timer)
   regs[E1000_IMS] = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 }
+
 int e1000_transmit(struct mbuf *m) {
   acquire(&e1000_lock);  // 获取锁，保证对发送环操作的互斥
   uint32 tdt = regs[E1000_TDT];  // 当前发送描述符索引

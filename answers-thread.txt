@@ -1,0 +1,7 @@
+Why are there missing keys with 2 threads, but not with 1 thread? 
+Identify a sequence of events with 2 threads that can lead to a key being missing. 
+Submit your sequence with a short explanation in answers-thread.txt.
+线程 A 执行 put(key1, value1)，定位桶 i 并进入 insert()，发现 table[i] 是空，开始插入。
+此时线程被抢占，线程 B 执行 put(key2, value2) 并定位同一桶 i，同样发现空桶，插入新节点。线程 B 完成插入。
+线程 A 恢复，基于旧的空指针继续插入，将头指针指向 key1 的新节点，覆盖了线程 B 的插入结果。结果导致 key2 的节点脱离链表，造成键永久丢失。
+

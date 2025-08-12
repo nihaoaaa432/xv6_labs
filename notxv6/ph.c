@@ -5,8 +5,10 @@
 #include <pthread.h>
 #include <sys/time.h>
 
-#define NBUCKET 5
+#define NBUCKET 10
 #define NKEYS 100000
+
+pthread_mutex_t locks[NBUCKET];
 
 struct entry {
   int key;
@@ -36,26 +38,22 @@ insert(int key, int value, struct entry **p, struct entry *n)
   *p = e;
 }
 
-static 
-void put(int key, int value)
-{
+static void put(int key, int value) {
   int i = key % NBUCKET;
-
-  // is the key already present?
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key)
       break;
   }
-  if(e){
-    // update the existing key.
+  if(e) {
     e->value = value;
   } else {
-    // the new is new.
+    pthread_mutex_lock(&locks[i]);
     insert(key, value, &table[i], table[i]);
+    pthread_mutex_unlock(&locks[i]);
   }
-
 }
+
 
 static struct entry*
 get(int key)
@@ -117,6 +115,10 @@ main(int argc, char *argv[])
   for (int i = 0; i < NKEYS; i++) {
     keys[i] = random();
   }
+
+for(int i = 0; i < NBUCKET; i++) {
+  pthread_mutex_init(&locks[i], NULL);
+}
 
   //
   // first the puts

@@ -21,17 +21,21 @@ barrier_init(void)
   assert(pthread_cond_init(&bstate.barrier_cond, NULL) == 0);
   bstate.nthread = 0;
 }
-
 static void 
 barrier()
 {
-  // YOUR CODE HERE
-  //
-  // Block until all threads have called barrier() and
-  // then increment bstate.round.
-  //
-  
+  pthread_mutex_lock(&bstate.barrier_mutex);  // 加锁保护共享变量
+  bstate.nthread++;                            // 记录一个线程到达屏障
+  if (bstate.nthread == nthread) {            // 判断是否为最后一个线程
+    bstate.round++;                            // 增加轮次数
+    bstate.nthread = 0;                        // 重置线程计数
+    pthread_cond_broadcast(&bstate.barrier_cond); // 唤醒所有等待线程
+  } else {
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex); // 阻塞等待
+  }
+  pthread_mutex_unlock(&bstate.barrier_mutex);  // 解锁
 }
+
 
 static void *
 thread(void *xa)

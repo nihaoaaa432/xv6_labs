@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -65,9 +69,63 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 12 || r_scause() == 13
+             || r_scause() == 15) {
+    char *pa;
+    uint64 va = PGROUNDDOWN(r_stval());
+    struct vma *vma = 0;
+    int flags = PTE_U;
+    int i;
+    for (i = 0; i < NVMA; ++i) {
+      // 类似 Linux 的 mmap，可以修改映射页末尾剩余的字节
+      if (p->vmas[i].addr && va >= p->vmas[i].addr
+          && va < p->vmas[i].addr + p->vmas[i].len) {
+        vma = &p->vmas[i];
+        break;
+      }
+    }
+    if (!vma) {
+      goto err;
+    }
+    
+    // 给映射页的页表项设置写标志和脏页标志
+    if (r_scause() == 15 && (vma->prot & PROT_WRITE)
+        && walkaddr(p->pagetable, va)) {
+      if (uvmsetdirtywrite(p->pagetable, va)) {
+        goto err;
+      }
+    } else {
+      if ((pa = kalloc()) == 0) {
+        goto err;
+      }
+      memset(pa, 0, PGSIZE);
+      ilock(vma->f->ip);
+      if (readi(vma->f->ip, 0, (uint64) pa, va - vma->addr + vma->offset, PGSIZE) < 0) {
+        iunlock(vma->f->ip);
+        goto err;
+      }
+      iunlock(vma->f->ip);
+      if ((vma->prot & PROT_READ)) {
+        flags |= PTE_R;
+      }
+
+      // 仅在发生写页错误且映射页允许写入时，设置 PTE 的写标志和脏页标志
+      // 否则不设置这两个标志，等下次发生写页错误时再设置
+      if (r_scause() == 15 && (vma->prot & PROT_WRITE)) {
+        flags |= PTE_W | PTE_D;
+      }
+      if ((vma->prot & PROT_EXEC)) {
+        flags |= PTE_X;
+      }
+      if (mappages(p->pagetable, va, PGSIZE, (uint64) pa, flags) != 0) {
+        kfree(pa);
+        goto err;
+      }
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
+err:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
@@ -217,4 +275,3 @@ devintr()
     return 0;
   }
 }
-
